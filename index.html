@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autenticação</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: #ffffff;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            text-align: center;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #1e1e1e;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            max-width: 300px;
+        }
+        h1 {
+            font-size: 1.5em;
+            margin: 0 0 10px;
+        }
+        p {
+            font-size: 1em;
+            margin: 0;
+            opacity: 0.8;
+        }
+        .spinner {
+            display: none;
+            border: 4px solid #6200ea;
+            border-top: 4px solid transparent;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 10px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Autenticação</h1>
+        <p id="status">Verificando...</p>
+        <div id="spinner" class="spinner"></div>
+    </div>
+
+    <script>
+        const status = document.getElementById('status');
+        const spinner = document.getElementById('spinner');
+        let hasAttempted = false;
+
+        // Verifica suporte à biometria
+        async function checkBiometricSupport() {
+            if (window.PublicKeyCredential) {
+                return await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+            }
+            return false;
+        }
+
+        // Registra a credencial biométrica
+        async function registerCredential() {
+            try {
+                const publicKey = {
+                    challenge: new Uint8Array([1, 2, 3, 4, 5]),
+                    rp: { name: "AuthApp" },
+                    user: {
+                        id: new Uint8Array([1, 2, 3, 4]),
+                        name: "user@example.com",
+                        displayName: "User"
+                    },
+                    pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+                    authenticatorSelection: {
+                        authenticatorAttachment: "platform",
+                        userVerification: "required"
+                    },
+                    timeout: 60000
+                };
+
+                const credential = await navigator.credentials.create({ publicKey: publicKey });
+                if (credential) {
+                    localStorage.setItem('credentialId', btoa(String.fromCharCode(...new Uint8Array(credential.rawId))));
+                    return credential;
+                }
+                return null;
+            } catch (error) {
+                console.error('Erro ao registrar:', error);
+                return null;
+            }
+        }
+
+        // Autentica com a credencial salva
+        async function authenticate() {
+            if (hasAttempted) {
+                status.textContent = 'Redirecionando...';
+                setTimeout(() => {
+                    window.location.href = 'https://ininitycodegov.github.io/UnifyHub/';
+                }, 1000);
+                return;
+            }
+
+            hasAttempted = true;
+            status.textContent = 'Verificando...';
+            spinner.style.display = 'block';
+
+            try {
+                const isSupported = await checkBiometricSupport();
+                if (!isSupported) {
+                    status.textContent = 'Biometria não suportada';
+                    setTimeout(() => {
+                        window.location.href = 'https://ininitycodegov.github.io/UnifyHub/';
+                    }, 1000);
+                    return;
+                }
+
+                const credentialId = localStorage.getItem('credentialId');
+                let credential;
+
+                if (!credentialId) {
+                    status.textContent = 'Registrando digital...';
+                    credential = await registerCredential();
+                    if (!credential) {
+                        throw new Error('Falha ao registrar.');
+                    }
+                } else {
+                    status.textContent = 'Use sua digital';
+                }
+
+                const publicKey = {
+                    challenge: new Uint8Array([1, 2, 3, 4, 5]),
+                    allowCredentials: credentialId ? [{
+                        id: new Uint8Array(atob(credentialId).split('').map(c => c.charCodeAt(0))),
+                        type: 'public-key'
+                    }] : [],
+                    userVerification: 'required',
+                    timeout: 60000
+                };
+
+                const authResult = await navigator.credentials.get({ publicKey: publicKey });
+                if (authResult) {
+                    status.textContent = 'Sucesso!';
+                    setTimeout(() => {
+                        window.location.href = 'https://ininitycodegov.github.io/UnifyHub/';
+                    }, 1000);
+                } else {
+                    throw new Error('Falha na autenticação.');
+                }
+            } catch (error) {
+                console.error('Erro:', error);
+                status.textContent = 'Erro';
+                setTimeout(() => {
+                    window.location.href = 'https://ininitycodegov.github.io/UnifyHub/';
+                }, 1000);
+            } finally {
+                spinner.style.display = 'none';
+            }
+        }
+
+        // Inicia a autenticação automaticamente
+        window.onload = authenticate;
+    </script>
+</body>
+</html>
